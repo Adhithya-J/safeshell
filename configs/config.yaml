@@ -1,0 +1,5 @@
+docker:
+  image: "alpine:latest"
+  timeout: 30
+ai:
+  provider: "openai"
