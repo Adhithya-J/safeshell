@@ -28,6 +28,7 @@ SafeShell is built with a modular Go architecture:
 ## 🛠️ Installation
 
 1. **Clone the repository**:
+
    ```bash
    git clone https://github.com/Adhithya-J/safeshell.git
    cd safeshell
@@ -42,11 +43,11 @@ SafeShell is built with a modular Go architecture:
 
 SafeShell uses environment variables for sensitive configuration:
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `OPENAI_API_KEY` | Your OpenAI API Key | (Required for AI) |
-| `OPENAI_BASE_URL` | API base URL | `https://api.openai.com/v1` |
-| `OPENAI_MODEL` | AI model to use | `gpt-4o` |
+| Variable          | Description         | Default                     |
+| ----------------- | ------------------- | --------------------------- |
+| `OPENAI_API_KEY`  | Your OpenAI API Key | (Required for AI)           |
+| `OPENAI_BASE_URL` | API base URL        | `https://api.openai.com/v1` |
+| `OPENAI_MODEL`    | AI model to use     | `gpt-4o`                    |
 
 ## 💻 Usage
 
@@ -94,6 +95,7 @@ Execution Complete.
 ## 🛠️ Development
 
 ### Project Structure
+
 - `cmd/`: Application entry points.
 - `configs/`: Default configuration files.
 - `internal/`: Private library code.
@@ -103,22 +105,27 @@ Execution Complete.
   - `validator/`: Basic shell script validation logic.
 
 ### Building
+
 ```bash
 go build -o safeshell ./cmd/safeshell
 ```
 
 ### Running Tests
+
 SafeShell includes a suite of unit tests that use manual mocks to verify the AI client and Docker runner without requiring external API keys or a running Docker daemon.
 
 Run all tests:
+
 ```bash
 go test ./internal/...
 ```
 
 To see verbose output:
+
 ```bash
 go test -v ./internal/...
 ```
 
 ## 📄 License
+
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

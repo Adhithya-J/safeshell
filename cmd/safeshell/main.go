@@ -10,6 +10,7 @@ import (
 	"github.com/Adhithya-J/safeshell/internal/ai"
 	"github.com/Adhithya-J/safeshell/internal/container"
 	"github.com/Adhithya-J/safeshell/internal/models"
+	"github.com/Adhithya-J/safeshell/internal/validator"
 )
 
 func main() {
@@ -67,8 +68,15 @@ func main() {
 
 		fmt.Printf("\nAI Explanation: %s\n", resp.Explanation)
 
+		// this validation depends entirely on LLM deciding what is safe
 		if !resp.IsSafe {
 			fmt.Println("AI flagged this request as UNSAFE. Refusing to generate script.")
+			continue
+		}
+
+		// rule based validation as fallback
+		if err := validator.Validate(resp.Script); err != nil {
+			fmt.Printf("Validation Error: %v\n", err)
 			continue
 		}
 
