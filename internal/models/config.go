@@ -19,4 +19,5 @@ type Config struct {
 	OpenAIBaseURL string
 	Model         string
 	DockerImage   string
+	UseMock       bool
 }
