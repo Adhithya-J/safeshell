@@ -47,7 +47,7 @@ func (m *mockDockerAPI) ContainerRemove(ctx context.Context, containerID string,
 
 func TestRunScript_Success(t *testing.T) {
 	runner := &Runner{img: "alpine:latest"}
-	
+
 	calls := []string{}
 	mock := &mockDockerAPI{
 		ImagePullFunc: func(ctx context.Context, ref string, options image.PullOptions) (io.ReadCloser, error) {
@@ -70,9 +70,11 @@ func TestRunScript_Success(t *testing.T) {
 		},
 		ContainerLogsFunc: func(ctx context.Context, container string, options container.LogsOptions) (io.ReadCloser, error) {
 			calls = append(calls, "Logs")
-			// Docker logs have a specific header (8 bytes) if not Tty
-			// But for simplicity in mock we can just return plain text if we don't care about stdcopy in test
-			return io.NopCloser(bytes.NewBufferString("output")), nil
+			// Docker logs have a specific header (8 bytes): [STREAM_TYPE, 0, 0, 0, SIZE1, SIZE2, SIZE3, SIZE4]
+			// 1 for stdout, 2 for stderr
+			content := "output"
+			header := []byte{1, 0, 0, 0, 0, 0, 0, byte(len(content))}
+			return io.NopCloser(bytes.NewBuffer(append(header, []byte(content)...))), nil
 		},
 		ContainerRemoveFunc: func(ctx context.Context, containerID string, options container.RemoveOptions) error {
 			calls = append(calls, "Remove")
@@ -81,9 +83,13 @@ func TestRunScript_Success(t *testing.T) {
 	}
 	runner.SetClient(mock)
 
-	err := runner.RunScript(context.Background(), "echo hello")
+	out, err := runner.RunScript(context.Background(), "echo hello")
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	if out != "output" {
+		t.Errorf("Expected output 'output', got '%s'", out)
 	}
 
 	expectedCalls := []string{"Pull", "Create", "Start", "Wait", "Logs", "Remove"}

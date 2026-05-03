@@ -118,3 +118,22 @@ func TestGetBashScript_HistoryTruncation(t *testing.T) {
 		t.Fatalf("Expected no error, got %v", err)
 	}
 }
+
+func TestGetBashScript_UseMock(t *testing.T) {
+	cfg := models.Config{
+		UseMock: true,
+	}
+	client := NewClient(cfg)
+
+	resp, err := client.GetBashScript("test command")
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+
+	if resp.Script == "" {
+		t.Error("Expected a script in mock mode, got empty string")
+	}
+	if !resp.IsSafe {
+		t.Error("Expected mock response to be safe")
+	}
+}

@@ -1,6 +1,7 @@
 package container
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -40,14 +41,14 @@ func (r *Runner) SetClient(cli DockerAPI) {
 	r.cli = cli
 }
 
-func (r *Runner) RunScript(ctx context.Context, script string) error {
+func (r *Runner) RunScript(ctx context.Context, script string) (string, error) {
 	// 1. Pull Image
 	reader, err := r.cli.ImagePull(ctx, r.img, image.PullOptions{})
 	if err != nil {
-		return fmt.Errorf("failed to pull image: %w", err)
+		return "", fmt.Errorf("failed to pull image: %w", err)
 	}
 	defer reader.Close()
-	io.Copy(os.Stdout, reader) // Show pull progress
+	io.Copy(os.Stdout, reader) // Show pull progress (Optional, might be noisy)
 
 	// 2. Create Container
 	resp, err := r.cli.ContainerCreate(ctx, &container.Config{
@@ -56,7 +57,7 @@ func (r *Runner) RunScript(ctx context.Context, script string) error {
 		Tty:   false,
 	}, nil, nil, nil, "")
 	if err != nil {
-		return fmt.Errorf("failed to create container: %w", err)
+		return "", fmt.Errorf("failed to create container: %w", err)
 	}
 
 	// 5. Cleanup
@@ -66,7 +67,7 @@ func (r *Runner) RunScript(ctx context.Context, script string) error {
 
 	// 3. Start Container
 	if err := r.cli.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
-		return fmt.Errorf("failed to start container: %w", err)
+		return "", fmt.Errorf("failed to start container: %w", err)
 	}
 
 	// 4. Wait & Logs
@@ -74,18 +75,25 @@ func (r *Runner) RunScript(ctx context.Context, script string) error {
 	select {
 	case err := <-errCh:
 		if err != nil {
-			return fmt.Errorf("error waiting for container: %w", err)
+			return "", fmt.Errorf("error waiting for container: %w", err)
 		}
 	case <-statusCh:
 	}
 
 	out, err := r.cli.ContainerLogs(ctx, resp.ID, container.LogsOptions{ShowStdout: true, ShowStderr: true})
 	if err != nil {
-		return fmt.Errorf("failed to get logs: %w", err)
+		return "", fmt.Errorf("failed to get logs: %w", err)
 	}
 	defer out.Close()
 
-	stdcopy.StdCopy(os.Stdout, os.Stderr, out)
+	var outputBuffer bytes.Buffer
+	// MultiWriter to both show output in console and capture it
+	mwStdout := io.MultiWriter(os.Stdout, &outputBuffer)
+	mwStderr := io.MultiWriter(os.Stderr, &outputBuffer)
 
-	return nil
+	_, err = stdcopy.StdCopy(mwStdout, mwStderr, out)
+	if err != nil {
+		return "", fmt.Errorf("failed to copy logs: %w", err)
+	}
+	return outputBuffer.String(), nil // fix this and see how output can be printed
 }

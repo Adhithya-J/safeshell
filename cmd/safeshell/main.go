@@ -2,18 +2,17 @@ package main
 
 import (
 	"bufio"
-	"context"
 	"flag"
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
-	"github.com/Adhithya-J/safeshell/internal/ai"
-	"github.com/Adhithya-J/safeshell/internal/container"
+	"github.com/Adhithya-J/safeshell/internal/app"
 	"github.com/Adhithya-J/safeshell/internal/models"
-	"github.com/Adhithya-J/safeshell/internal/validator"
+	"github.com/joho/godotenv"
 )
+
+const Version string = "0.1.0"
 
 func main() {
 
@@ -27,8 +26,12 @@ func main() {
 	dockerimgPtr := flag.String("docker-img", "alpine:latest", "The docker image to execute the scripts in")
 
 	// Shell config
+	versionPtr := flag.Bool("version", false, "Displays program version")
 	dryRunPtr := flag.Bool("dry-run", false, "Prints command without executing it")
 	timeoutPtr := flag.Int("timeout", 10, "Timeout in seconds")
+	promptPtr := flag.String("prompt", "", "Allows user to pass prompt to run the program in non-interactive mode")
+	// outputPtr := flag.String("output", "", "Allows user to store the generated script to the specified file")
+	envFilePtr := flag.String("env-file", "", "Allows user to specify the path to the .env file")
 	// readOnlyPtr := flag.Bool("read-only", false, "Allow only read only commands")
 	// verbosePtr := flag.Bool("verbose", false, "Control verbosity of the output")
 
@@ -36,6 +39,20 @@ func main() {
 	// shellPtr := flag.String("shell", "bash", "Shell to genrate the command in")
 
 	flag.Parse()
+
+	if *versionPtr {
+		fmt.Printf("%s", "safeshell v"+Version)
+		return
+	}
+
+	if *envFilePtr != "" {
+		err := godotenv.Load(*envFilePtr)
+		if err != nil {
+			fmt.Printf("Error loading environment file at : %s", *envFilePtr)
+		} else {
+			godotenv.Load()
+		}
+	}
 
 	cfg := models.Config{
 		OpenAIAPIKey:  os.Getenv("OPENAI_API_KEY"),
@@ -50,25 +67,27 @@ func main() {
 	if cfg.Model == "" {
 		cfg.Model = "gpt-4o"
 	}
-
-	if *mockPtr || cfg.OpenAIAPIKey == "" {
-		if cfg.OpenAIAPIKey == "" {
-			fmt.Println("Warning: OPENAI_API_KEY is not set.")
-		}
-
+	if *mockPtr {
 		fmt.Println("Running in MOCK mode.")
 		cfg.UseMock = true
+	} else if cfg.OpenAIAPIKey == "" {
+		fmt.Errorf("Error: OPENAI_API_KEY is not set.")
+		os.Exit(1)
 	}
 
-	aiClient := ai.NewClient(cfg)
-	runner, err := container.NewRunner(cfg.DockerImage)
-	if err != nil {
-		fmt.Printf("Error initializing Docker runner: %v\n", err)
+	if err := app.Initialize(cfg); err != nil {
+		fmt.Printf("Failed to initialize application: %v\n", err)
 		os.Exit(1)
 	}
 
 	scanner := bufio.NewScanner(os.Stdin)
 	fmt.Println("Safeshell AI Agent Initialized.")
+
+	if *promptPtr != "" {
+		app.HandleInput(*promptPtr, scanner, *dryRunPtr, *timeoutPtr)
+		return
+	}
+
 	fmt.Println("Type your task in natural language (or 'exit' to quit):")
 
 	for {
@@ -82,64 +101,7 @@ func main() {
 			break
 		}
 
-		if input == "" {
-			continue
-		}
+		app.HandleInput(input, scanner, *dryRunPtr, *timeoutPtr)
 
-		fmt.Println("Thinking...")
-		resp, err := aiClient.GetBashScript(input)
-		if err != nil {
-			fmt.Printf("Error: %v\n", err)
-			continue
-		}
-
-		fmt.Printf("\nAI Explanation: %s\n", resp.Explanation)
-
-		// this validation depends entirely on LLM deciding what is safe
-		if !resp.IsSafe {
-			fmt.Println("AI flagged this request as UNSAFE. Refusing to generate script.")
-			continue
-		}
-
-		// rule based validation as fallback
-		if err := validator.Validate(resp.Script); err != nil {
-			fmt.Printf("Validation Error: %v\n", err)
-			continue
-		}
-
-		fmt.Println("\n--- PROPOSED SCRIPT ---")
-		fmt.Println(resp.Script)
-		fmt.Println("-----------------------")
-
-		if *dryRunPtr {
-			fmt.Println("Skipping execution")
-			continue
-		}
-
-		fmt.Print("\nDo you want to execute this script in Docker? (y/N): ")
-		if !scanner.Scan() {
-			break
-		}
-		confirm := strings.ToLower(scanner.Text())
-
-		if confirm == "y" || confirm == "yes" {
-			fmt.Println("Executing...")
-
-			ctx := context.Background()
-			if *timeoutPtr > 0 {
-				var cancel context.CancelFunc
-				ctx, cancel = context.WithTimeout(context.Background(), time.Duration(*timeoutPtr*int(time.Second)))
-				defer cancel()
-			}
-
-			err := runner.RunScript(ctx, resp.Script)
-			if err != nil {
-				fmt.Printf("Execution Error: %v\n", err)
-			} else {
-				fmt.Println("Execution Complete.")
-			}
-		} else {
-			fmt.Println("Execution cancelled.")
-		}
 	}
 }
